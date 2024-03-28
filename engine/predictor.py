@@ -1,21 +1,34 @@
 import os
 import torch
 
+# Define special tokens
 BOS_IDX = 1
 EOS_IDX = 58 #69
 
 class Predictor:
+    """
+    Predictor class for generating predictions using a trained model.
+    """
     def __init__(self, config):
+        """
+        Initialize Predictor object.
+
+        Args:
+        - config: Configuration object containing model parameters
+        """
         self.config = config
         self.device = torch.device(self.config.device)
 
+        # Get the model
         self.model = self.get_model()
         self.model.to(self.device)
 
+        # Load the best checkpoint
         self.logs_dir = os.path.join(self.config.root_dir, self.config.experiment_name)
         path = os.path.join(self.logs_dir, "best_checkpoint.pth")
         self.model.load_state_dict(torch.load(path)["state_dict"])
         
+        # Set the model to evaluation mode
         self.model.eval()
         
     def get_model(self):
@@ -49,7 +62,6 @@ class Predictor:
         src_padding_mask = src_padding_mask.to(self.device)
         dim = 1
 
-#         if self.config.model_name == "seq2seq_transformer":
         memory = self.model.encode(src, src_mask)
         memory = memory.to(self.device)
         dim = 1
@@ -59,37 +71,14 @@ class Predictor:
             tgt_mask = (self.generate_square_subsequent_mask(ys.size(1), self.device).type(torch.bool)).to(self.device)
 
             out = self.model.decode(ys, memory, tgt_mask)
-            # out = out.transpose(0, 1)
             prob = self.model.generator(out[:, -1])
 
             _, next_word = torch.max(prob, dim=1)
             next_word = next_word.item()
-#             print(next_word)
 
             ys = torch.cat([ys, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=dim)
             if next_word == EOS_IDX:
                 break
-
-#         else:
-#             memory = self.model.encode(src, src_padding_mask)
-#             memory = memory.to(self.device)
-#             dim = 1
-#             ys = torch.ones(1, 1).fill_(start_symbol).type(torch.long).to(self.device)
-#             for i in range(max_len-1):
-
-#                 tgt_mask = (self.generate_square_subsequent_mask(ys.size(1), self.device).type(torch.bool)).to(self.device)
-
-#                 out = self.model.decode(ys, memory, src_padding_mask, tgt_mask)
-#                 # out = out.transpose(0, 1)
-#                 prob = self.model.generator(out[:, -1])
-
-#                 _, next_word = torch.max(prob, dim=1)
-#                 next_word = next_word.item()
-#                 print(next_word)
-
-#                 ys = torch.cat([ys, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=dim)
-#                 if next_word == EOS_IDX:
-#                     break
 
         return ys
 
@@ -107,53 +96,19 @@ class Predictor:
 
             return tgt_tokens
         else:
-            batch_size = x.size(0)
-#             pred = torch.zeros((batch_size, 256))
-#             pred = pred.type(torch.LongTensor).to(self.device)
-#             pred[:, 0] = BOS_IDX
             ys = torch.ones(1, 1).fill_(BOS_IDX).type(torch.long).to(self.device)
-#             src_padding_mask = torch.zeros(1, 1000).type(torch.bool).to(self.device)
-
-#             e_mask = (torch.zeros((x.shape[0], x.shape[1]), device=self.device)).type(torch.bool) #self.model.pad_mask(x)
             e_mask = torch.zeros(1, x.shape[1]).type(torch.bool).to(self.device)
             memory = self.model.encoder(x, e_mask)
-#             return memory
 
             for idx in range(1, 256):
-#                 y = pred[:, :idx]
-#                 d_mask = (self.generate_square_subsequent_mask(ys.size(1), self.device).type(torch.bool)).to(self.device)
                 d_mask = torch.triu(torch.full((ys.size(1), ys.size(1)), float('-inf')), diagonal=1).to(self.device)
                 d_out = self.model.decoder(ys, memory, e_mask, d_mask)
 
                 prob = self.model.generator(d_out[:, -1])
                 _, next_word = torch.max(prob, dim=1)
                 next_word = next_word.item()
-#                 pred[:, idx] = logit.argmax(dim=-1)[:, -1]
                 ys = torch.cat([ys, torch.ones(1, 1).type_as(x.data).fill_(next_word)], dim=1)
                 if next_word == EOS_IDX:
                     break
 
             return ys.flatten()
-
-#     def predict(self, x):
-
-#         batch_size = x.size(0)
-#         pred = torch.zeros((batch_size, 256))
-#         pred = pred.type(torch.LongTensor).to(self.device)
-#         pred[:, 0] = BOS_IDX
-#         src_padding_mask = torch.zeros(1, 1000).type(torch.bool).to(self.device)
-
-#         e_mask = (torch.zeros((x.shape[0], x.shape[1]), device=self.device)).type(torch.bool) #self.model.pad_mask(x)
-#         memory = self.model.encoder(x, e_mask)
-
-#         for idx in range(1, 256):
-#             y = pred[:, :idx]
-#             d_out = self.model.decoder(y, memory, e_mask, None)
-
-#             logit = self.model.generator(d_out)
-#             pred[:, idx] = logit.argmax(dim=-1)[:, -1]
-#             if pred[:, idx].item() == EOS_IDX:
-#                 break
-
-#         return pred
-

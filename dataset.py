@@ -11,7 +11,16 @@ from utils import EncoderTokenizer, DecoderTokenizer
 PAD_IDX = 0
 
 def prepare_dataset(config):
+    """
+    Prepare the dataset for training.
 
+    Args:
+    - config: Configuration object containing dataset parameters
+
+    Returns:
+    - train_df: DataFrame containing training data information
+    - equations_df: DataFrame containing equations information
+    """
     input_max_len = config.input_max_len
     df = pd.read_csv(config.df_path)
 
@@ -25,21 +34,25 @@ def prepare_dataset(config):
         }
     
     for (index, row) in tqdm(df.iterrows()):
-#         with open(row["path"]) as file:
-#             data = file.readlines()
-#         X = encoder_tokenizer.tokenize(data)
+        # Read data from file
+        with open(row["path"]) as file:
+            data = file.readlines()
+        
+        # Tokenize the data using encoder tokenizer
+        X = encoder_tokenizer.tokenize(data)
 
-#         n_splits = X.shape[0] // input_max_len
-#         X = X[:n_splits*input_max_len]
-#         x_chunks = np.split(X, n_splits)
+        n_splits = X.shape[0] // input_max_len
+        X = X[:n_splits*input_max_len]
+        x_chunks = np.split(X, n_splits)
 
-#         sub_dir = os.path.join(config.output_dir, row["Filename"])
-#         os.makedirs(sub_dir, exist_ok=True)
+        sub_dir = os.path.join(config.output_dir, row["Filename"])
+        os.makedirs(sub_dir, exist_ok=True)
 
-#         for (index, x) in enumerate(x_chunks):
-#             np.save(os.path.join(sub_dir, f"{index}.npy"), x)
+        # Save tokenized data chunks to files
+        for (index, x) in enumerate(x_chunks):
+            np.save(os.path.join(sub_dir, f"{index}.npy"), x)
 
-        n_splits = 2500
+        # Update train_df with data information
         train_df["filename"].extend([row["Filename"]]*n_splits)
         train_df["data_num"].extend([i for i in range(n_splits)])
         train_df["number"].extend([row["Number"] for i in range(n_splits)])
@@ -71,12 +84,14 @@ def prepare_dataset(config):
     return train_df, equations_df
 
 class FeynmanDataset(Dataset):
+    """
+    Custom Dataset class for Feynman Equation dataset.
+    """
     def __init__(self, df, dataset_dir):
         super().__init__()
         self.df = df
         self.dataset_dir = dataset_dir
         self.prefix_equations = np.load(os.path.join(dataset_dir, "prefix_equations.npy"))
-        # prefix_equations = []
 
         prefix_equations = []
         for prefix in self.prefix_equations:
@@ -88,6 +103,15 @@ class FeynmanDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
+        """
+        Get a single item from the dataset.
+
+        Args:
+        - idx: Index of the item
+
+        Returns:
+        - Tuple containing input and target data
+        """
         row = self.df.iloc[idx]
         path = os.path.join(os.path.join(self.dataset_dir, row['filename']), f"{row['data_num']}.npy")
         x = np.load(path).astype(np.int32)
@@ -98,6 +122,20 @@ class FeynmanDataset(Dataset):
         return (torch.Tensor(x).long(), torch.Tensor(y).long())
 
 def get_datasets(df, input_df, dataset_dir, split):
+    """
+    Prepare training, validation, and test datasets.
+
+    Args:
+    - df: DataFrame containing data information
+    - input_df: DataFrame containing input data information
+    - dataset_dir: Directory containing dataset files
+    - split: List containing train, validation, and test split ratios
+
+    Returns:
+    - datasets: Dictionary containing train, validation, and test datasets
+    - train_equations: List of equations used for training
+    - test_equations: List of equations used for testing
+    """
     train_df, test_df = train_test_split(df, test_size=split[2], shuffle=True, random_state=42)
     train_equations = train_df['Filename'].tolist()
     test_equations = test_df['Filename'].tolist()
@@ -114,7 +152,6 @@ def get_datasets(df, input_df, dataset_dir, split):
 #     input_val_df = input_df[input_df['filename'].isin(val_equations)]
 #     input_train_df = input_df[input_df['filename'].isin(train_equations)]
 
-
     input_train_df, input_val_df = train_test_split(input_train_df, test_size=val_size, shuffle=True, random_state=42)
 
     train_dataset = FeynmanDataset(input_train_df, dataset_dir)
@@ -130,6 +167,18 @@ def get_datasets(df, input_df, dataset_dir, split):
     return datasets, train_equations, test_equations
 
 def get_dataloaders(datasets, train_bs, val_bs, test_bs):
+    """
+    Get data loaders for training, validation, and testing.
+
+    Args:
+    - datasets: Dictionary containing train, validation, and test datasets
+    - train_bs: Batch size for training
+    - val_bs: Batch size for validation
+    - test_bs: Batch size for testing
+
+    Returns:
+    - dataloaders: Dictionary containing train, validation, and test data loaders
+    """
     train_dataloader = DataLoader(datasets['train'], batch_size=train_bs,
                                   shuffle=True, num_workers=2, pin_memory=True, collate_fn=collate_fn)
     val_dataloader = DataLoader(datasets['valid'], batch_size=val_bs,

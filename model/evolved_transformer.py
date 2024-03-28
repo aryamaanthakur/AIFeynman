@@ -85,8 +85,6 @@ class GatedConvolution(nn.Module):
         return out
 
 
-
-
 class SeparableConv1D(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size):
         super(SeparableConv1D, self).__init__()
@@ -109,8 +107,6 @@ class SeparableConv1D(nn.Module):
         out = self.depth_wise(x)
         out = self.point_wise(out)
         return out
-
-
 
 
 class EncoderCell(nn.Module):
@@ -206,8 +202,6 @@ class EncoderCell(nn.Module):
         return out 
 
 
-
-
 class DecoderCell(nn.Module):
     def __init__(self, config):
         super(DecoderCell, self).__init__()
@@ -258,8 +252,6 @@ class DecoderCell(nn.Module):
             nn.ReLU(),
             nn.Linear(config.pff_dim, config.hidden_dim)
         )
-
-
 
     def forward(self, x, memory, e_mask, d_mask):
 
@@ -331,8 +323,6 @@ class DecoderCell(nn.Module):
         return out
 
 
-
-
 class EvolvedEncoder(nn.Module):
     def __init__(self, config):
         super(EvolvedEncoder, self).__init__()
@@ -348,8 +338,6 @@ class EvolvedEncoder(nn.Module):
         for cell in self.cells:
             x = cell(x, e_mask)
         return x
-
-
 
 
 class EvolvedDecoder(nn.Module):
@@ -368,7 +356,6 @@ class EvolvedDecoder(nn.Module):
             x = cell(x, memory, e_mask, d_mask)
 
         return x
-
 
 
 class StandardDecoder(nn.Module):
@@ -402,6 +389,7 @@ class StandardDecoder(nn.Module):
             )
 
         return x
+
 
 class Model(nn.Module):
     def __init__(self, config):

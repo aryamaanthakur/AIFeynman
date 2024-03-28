@@ -11,8 +11,17 @@ from .predictor import Predictor
 from .utils import AverageMeter, seed_everything, create_mask, sequence_accuracy
 
 class Trainer:
-    """"""
+    """
+    Trainer class for training and evaluating a PyTorch model.
+    """
     def __init__(self, config, dataloaders):
+        """
+        Initialize Trainer object.
+
+        Args:
+        - config: Configuration object containing training parameters
+        - dataloaders: Dictionary containing data loaders for train, validation, and test sets
+        """
         self.config = config
         self.device = torch.device(self.config.device)
         self.dataloaders = dataloaders
@@ -25,13 +34,14 @@ class Trainer:
         else:
             self.dtype = torch.float32
 
+        # Initialize model, optimizer, scheduler, and criterion
         self.model = self.get_model()
         self.model.to(self.device)
-
         self.optimizer = self.get_optimizer()
         self.scheduler = self.get_scheduler()
         self.criterion = self.get_criterion()
-  
+
+        # Initialize training-related variables
         self.current_epoch = 0
         self.best_accuracy = -1
         self.best_val_loss = 1e6
@@ -39,10 +49,14 @@ class Trainer:
         self.valid_loss_list = []
         self.valid_accuracy_tok_list = []
 
+        # Create directory for saving logs
         self.logs_dir = os.path.join(self.config.root_dir, self.config.experiment_name)
         os.makedirs(self.logs_dir, exist_ok=True)
 
     def get_model(self):
+        """
+        Initialize and return the model based on the configuration.
+        """
         if self.config.model_name == "seq2seq_transformer":
             from model.seq2seq import Model
             model = Model(num_encoder_layers=self.config.num_encoder_layers,
@@ -63,6 +77,9 @@ class Trainer:
         return model
 
     def get_optimizer(self):
+        """
+        Initialize and return the optimizer based on the configuration.
+        """
         optimizer_parameters = self.model.parameters()
 
         if self.config.optimizer_type == "sgd":
@@ -77,6 +94,9 @@ class Trainer:
         return optimizer
     
     def get_scheduler(self):
+        """
+        Initialize and return the learning rate scheduler based on the configuration.
+        """
         if self.config.scheduler_type == "multi_step":
             scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self.config.scheduler_milestones, gamma=self.config.scheduler_gamma)
         elif self.config.scheduler_type == "reduce_lr_on_plateau":
@@ -92,6 +112,9 @@ class Trainer:
 
     
     def get_criterion(self):
+        """
+        Initialize and return the loss function based on the configuration.
+        """
         if self.config.criterion == "cross_entropy":
             criterion = torch.nn.CrossEntropyLoss()
         else:
@@ -100,6 +123,9 @@ class Trainer:
         return criterion
 
     def train_one_epoch(self):
+        """
+        Train the model for one epoch.
+        """
         self.model.train()
         pbar = tqdm(self.dataloaders['train'], total=len(self.dataloaders['train']))
         pbar.set_description(f"[{self.current_epoch+1}/{self.config.epochs}] Train")
@@ -133,6 +159,15 @@ class Trainer:
         return running_loss.avg
 
     def evaluate(self, phase):
+        """
+        Evaluate the model on validation or test data.
+
+        Args:
+        - phase: Phase of evaluation, either "valid" or "test".
+
+        Returns:
+        - Tuple containing average token accuracy and average loss.
+        """
         self.model.eval()
         
         pbar = tqdm(self.dataloaders[phase], total=len(self.dataloaders[phase]))
@@ -166,6 +201,9 @@ class Trainer:
         return running_acc_tok.avg, running_loss.avg
 
     def train(self):
+        """
+        Main training loop.
+        """
         start_epoch = self.current_epoch
         for self.current_epoch in range(start_epoch, self.config.epochs):
             training_loss = self.train_one_epoch() 
@@ -194,6 +232,9 @@ class Trainer:
 
         
     def save_model(self, file_name):
+        """
+        Save model checkpoints.
+        """
         state_dict = self.model.state_dict()
         torch.save({
                 "epoch": self.current_epoch + 1,
@@ -205,6 +246,9 @@ class Trainer:
             }, os.path.join(self.logs_dir, file_name))
 
     def log_results(self):
+        """
+        Log training results to a CSV file.
+        """
         data_list = [self.train_loss_list, self.valid_loss_list, self.valid_accuracy_tok_list]
         column_list = ['train_losses', 'valid_losses', 'token_valid_accuracy']
         
@@ -213,6 +257,9 @@ class Trainer:
         df.to_csv(os.path.join(self.logs_dir, "logs.csv"))
         
     def test_seq_acc(self):
+        """
+        Evaluate model's sequence accuracy on test data.
+        """
         file = os.path.join(self.logs_dir, "best_checkpoint.pth")
         state_dict = torch.load(file, map_location=self.device)['state_dict']
         self.model.load_state_dict(state_dict)
@@ -234,8 +281,6 @@ class Trainer:
             y_pred = predictor.predict(src[0].unsqueeze(0)) #only one example from each batch
             y_preds.append(y_pred.cpu().numpy())
             y_true.append(np.trim_zeros(tgt[0]))
-
-#         return y_true, y_preds
 
         test_accuracy_seq = sequence_accuracy(y_true, y_preds)
         f= open(os.path.join(self.logs_dir, "score.txt"),"w+")
