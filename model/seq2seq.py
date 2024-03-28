@@ -4,6 +4,7 @@ from torch import Tensor
 from torch.nn import Transformer
 import math
 
+# https://github.com/neerajanand321/SYMBA_Pytorch/blob/main/models/seq2seq_transformer.py
 class TokenEmbedding(nn.Module):
     ''' helper Module to convert tensor of input indices into corresponding tensor of token embeddings'''
     

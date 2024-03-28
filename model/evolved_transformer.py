@@ -4,8 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 from torch.nn import functional as F
-# from .common import clones, Embeddings
 from collections import namedtuple
+
+# https://github.com/moon23k/Transformer_Variants/blob/main/model/evolved.py
 
 def clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
