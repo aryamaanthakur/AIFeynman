@@ -3,51 +3,43 @@ from typing import Optional
 
 @dataclass
 class Config:
-    experiment_name: Optional[str] = "default"
+    experiment_name: Optional[str] = "seq2seq4"
     root_dir: Optional[str] = "./"
-    device: Optional[str] = "cuda:0"
-    save_at_epochs: Optional[list] = field(default_factory=list)
-    debug: Optional[bool] = False
+    device: Optional[str] = "cuda:1"
         
     #training parameters
-    epochs: Optional[int] = 20
-    seed: Optional[int] = 23
+    epochs: Optional[int] = 10
+    seed: Optional[int] = 42
     use_half_precision: Optional[bool] = True
 
-    #data loader parameters
-    train_shuffle: Optional[bool] = True
-    test_shuffle: Optional[bool] = False
-    training_batch_size: Optional[int] = 128
-    test_batch_size: Optional[int] = 256
-    num_workers: Optional[int] = 4
-    pin_memory: Optional[bool] = True
-        
     # scheduler parameters
-    scheduler_type: Optional[str] = "multi_step" # multi_step or none
-    scheduler_gamma: Optional[float] = 0.1
-    scheduler_milestones: Optional[list] = field(default_factory=lambda: [5, 10, 15])
+    scheduler_type: Optional[str] = "cosine_annealing_warm_restart" # multi_step or none
+    T_0: Optional[int] = 10
+    T_mult: Optional[int] = 1
 
     # optimizer parameters
     optimizer_type: Optional[str] = "adam" # sgd or adam
-    optimizer_lr: Optional[float] = 0.0003   
+    optimizer_lr: Optional[float] = 0.0001   
     optimizer_momentum: Optional[float] = 0.9
-    optimizer_weight_decay: Optional[float] = 0.0
+    optimizer_weight_decay: Optional[float] = 0.0001
     optimizer_no_decay: Optional[list] = field(default_factory=list)
     clip_grad_norm: Optional[float] = -1
         
     # Model Parameters
     model_name: Optional[str] = "seq2seq_transformer"
-    embedding_size: Optional[int] = 512
-    hidden_dim: Optional[int] = 512
+    hybrid: Optional[bool] = True
+    embedding_size: Optional[int] = 64
+    hidden_dim: Optional[int] = 64
+    pff_dim: Optional[int] = 512
     nhead: Optional[int] = 8
-    num_encoder_layers: Optional[int] = 3
-    num_decoder_layers: Optional[int] = 3
-    dropout: Optional[int] = 0.1
+    num_encoder_layers: Optional[int] = 2
+    num_decoder_layers: Optional[int] = 6
+    dropout: Optional[int] = 0.2
     pretrain: Optional[bool] = False
-    input_emb_size: Optional[int] = 256
+    input_emb_size: Optional[int] = 64
     max_input_points: Optional[int] = 33
     src_vocab_size: Optional[int] = 1104
-    tgt_vocab_size: Optional[int] = 70
+    tgt_vocab_size: Optional[int] = 59
 
     # Criterion
     criterion: Optional[str] = "cross_entropy"

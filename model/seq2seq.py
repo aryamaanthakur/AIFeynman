@@ -36,9 +36,9 @@ class PositionalEncoding(nn.Module):
     def forward(self, token_embedding: Tensor):
         return self.dropout(token_embedding + self.pos_embedding[:, :token_embedding.size(1), :])
 
-    
+
 class LinearPointEmbedder(nn.Module):
-    def __init__(self, vocab_size: int, input_emb_size, emb_size, max_input_points):
+    def __init__(self, vocab_size: int, input_emb_size, emb_size, max_input_points, dropout=0.2):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, input_emb_size)
         self.emb_size = emb_size
@@ -46,15 +46,17 @@ class LinearPointEmbedder(nn.Module):
         self.fc1 = nn.Linear(self.input_size, emb_size)
         self.fc2 = nn.Linear(emb_size, emb_size)
         self.activation = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, tokens):
         out = self.embedding(tokens.long()) * math.sqrt(self.emb_size)
         bs, n = out.shape[0], out.shape[1]
         out = out.view(bs, n, -1)
         out = self.activation(self.fc1(out))
+        out = self.dropout(out)
         out = self.fc2(out)
         return out
-    
+
 
 class Model(nn.Module):
     '''Seq2Seq Network'''
@@ -79,7 +81,7 @@ class Model(nn.Module):
                                        dropout=dropout,
                                        batch_first=True)
         self.generator = nn.Linear(emb_size, tgt_vocab_size)
-        self.src_tok_emb = LinearPointEmbedder(src_vocab_size, input_emb_size, emb_size, max_input_points)
+        self.src_tok_emb = LinearPointEmbedder(src_vocab_size, input_emb_size, emb_size, max_input_points, dropout)
         self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size)
         self.positional_encoding = PositionalEncoding(emb_size, dropout=dropout)
 

@@ -25,20 +25,21 @@ def prepare_dataset(config):
         }
     
     for (index, row) in tqdm(df.iterrows()):
-        with open(row["path"]) as file:
-            data = file.readlines()
-        X = encoder_tokenizer.tokenize(data)
+#         with open(row["path"]) as file:
+#             data = file.readlines()
+#         X = encoder_tokenizer.tokenize(data)
 
-        n_splits = X.shape[0] // input_max_len
-        X = X[:n_splits*input_max_len]
-        x_chunks = np.split(X, n_splits)
+#         n_splits = X.shape[0] // input_max_len
+#         X = X[:n_splits*input_max_len]
+#         x_chunks = np.split(X, n_splits)
 
-        sub_dir = os.path.join(config.output_dir, row["Filename"])
-        os.makedirs(sub_dir, exist_ok=True)
-        
-        for (index, x) in enumerate(x_chunks):
-            np.save(os.path.join(sub_dir, f"{index}.npy"), x)
+#         sub_dir = os.path.join(config.output_dir, row["Filename"])
+#         os.makedirs(sub_dir, exist_ok=True)
 
+#         for (index, x) in enumerate(x_chunks):
+#             np.save(os.path.join(sub_dir, f"{index}.npy"), x)
+
+        n_splits = 2500
         train_df["filename"].extend([row["Filename"]]*n_splits)
         train_df["data_num"].extend([i for i in range(n_splits)])
         train_df["number"].extend([row["Number"] for i in range(n_splits)])
@@ -57,6 +58,7 @@ def prepare_dataset(config):
         prefix = eval(row["prefix"])
         prefix = ["<bos>"] + prefix + ["<eos>"]
         equations_df["prefix"].append(prefix)
+        print(row["Filename"])
         y = decoder_tokenizer.encode([prefix])[0]
         y = np.pad(y, (0, 256 - len(y)))
         prefix_equations[row["Number"]-1, :] = y
@@ -95,16 +97,25 @@ class FeynmanDataset(Dataset):
 
         return (torch.Tensor(x).long(), torch.Tensor(y).long())
 
-  
 def get_datasets(df, input_df, dataset_dir, split):
-    train_df, test_df = train_test_split(df, test_size=split[2])
+    train_df, test_df = train_test_split(df, test_size=split[2], shuffle=True, random_state=42)
     train_equations = train_df['Filename'].tolist()
     test_equations = test_df['Filename'].tolist()
     
     input_test_df = input_df[input_df['filename'].isin(test_equations)]
     input_train_df = input_df[input_df['filename'].isin(train_equations)]
 
-    input_train_df, input_val_df = train_test_split(input_train_df, test_size=split[1], shuffle=True)
+#     input_train_df, input_test_df = train_test_split(input_df, test_size=split[2], shuffle=True, random_state=1)
+    val_size = split[1]/(split[0] + split[1])
+#     train_df, val_df = train_test_split(train_df, test_size=val_size, shuffle=True, random_state=42)
+#     train_equations = train_df['Filename'].tolist()
+#     val_equations = val_df['Filename'].tolist()
+
+#     input_val_df = input_df[input_df['filename'].isin(val_equations)]
+#     input_train_df = input_df[input_df['filename'].isin(train_equations)]
+
+
+    input_train_df, input_val_df = train_test_split(input_train_df, test_size=val_size, shuffle=True, random_state=42)
 
     train_dataset = FeynmanDataset(input_train_df, dataset_dir)
     val_dataset = FeynmanDataset(input_val_df, dataset_dir)
@@ -116,15 +127,15 @@ def get_datasets(df, input_df, dataset_dir, split):
         "valid":val_dataset
         }
     
-    return datasets
+    return datasets, train_equations, test_equations
 
-def get_dataloaders(datasets, train_bs, test_bs):
+def get_dataloaders(datasets, train_bs, val_bs, test_bs):
     train_dataloader = DataLoader(datasets['train'], batch_size=train_bs,
                                   shuffle=True, num_workers=2, pin_memory=True, collate_fn=collate_fn)
-    val_dataloader = DataLoader(datasets['valid'], batch_size=test_bs,
+    val_dataloader = DataLoader(datasets['valid'], batch_size=val_bs,
                                   shuffle=True, num_workers=2, pin_memory=True, collate_fn=collate_fn)
     test_dataloader = DataLoader(datasets['test'], batch_size=test_bs,
-                                  shuffle=True, num_workers=2, pin_memory=True, collate_fn=collate_fn)
+                                  shuffle=False, num_workers=2, pin_memory=False, collate_fn=collate_fn)
     
     dataloaders = {
         "train":train_dataloader,

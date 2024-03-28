@@ -6,12 +6,12 @@ import pandas as pd
 from tqdm import tqdm
 
 from .utils import create_mask
+from .predictor import Predictor
 
-# import model.seq2seq
-
-from .utils import AverageMeter, seed_everything, create_mask
+from .utils import AverageMeter, seed_everything, create_mask, sequence_accuracy
 
 class Trainer:
+    """"""
     def __init__(self, config, dataloaders):
         self.config = config
         self.device = torch.device(self.config.device)
@@ -54,6 +54,9 @@ class Trainer:
                           input_emb_size=self.config.input_emb_size,
                           max_input_points=self.config.max_input_points,
                           )
+        elif self.config.model_name == "evolved_transformer":
+            from model.evolved_transformer import Model
+            model = Model(self.config)
         else:
             raise NotImplementedError
         
@@ -65,7 +68,9 @@ class Trainer:
         if self.config.optimizer_type == "sgd":
             optimizer = torch.optim.SGD(optimizer_parameters, lr=self.config.optimizer_lr, momentum=self.config.optimizer_momentum,)
         elif self.config.optimizer_type == "adam":
-            optimizer = torch.optim.Adam(optimizer_parameters, lr=self.config.optimizer_lr, eps=1e-9)
+            optimizer = torch.optim.Adam(optimizer_parameters, lr=self.config.optimizer_lr, eps=1e-8, weight_decay=self.config.optimizer_weight_decay)
+        elif self.config.optimizer_type == "adamw":
+            optimizer = torch.optim.AdamW(optimizer_parameters, lr=self.config.optimizer_lr, eps=1e-8, weight_decay=self.config.optimizer_weight_decay)
         else:
             raise NotImplementedError
         
@@ -77,7 +82,7 @@ class Trainer:
         elif self.config.scheduler_type == "reduce_lr_on_plateau":
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=2)
         elif self.config.scheduler_type == "cosine_annealing_warm_restart":
-            scheduler = torch.optim.lr_scheduler.CosineAnealingWarmRestarts(self.optimizer, self.config.T_0, self.config.T_mult)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, self.config.T_0, self.config.T_mult)
         elif self.config.scheduler_type == "none":
             scheduler = None
         else:
@@ -103,17 +108,16 @@ class Trainer:
             src = src.to(self.device)
             tgt = tgt.to(self.device)
 
-            # src_emb = src_emb.transpose(0, 1)
-            # tgt_emb = tgt_emb.transpose(0, 1)
-
             bs = src.size(0)
 
-            # print(src.shape, tgt.shape)
             with torch.autocast(device_type='cuda', dtype=self.dtype):
-                src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt[:, :-1], self.device)
-                logits = self.model(src, tgt[:, :-1], src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
-                # print(logits.shape, tgt.shape)
-                loss = self.criterion(logits.reshape(-1, logits.shape[-1]), tgt[:, 1:].reshape(-1))
+                if self.config.model_name == "seq2seq_transformer":
+                    src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt[:, :-1], self.device)
+                    logits = self.model(src, tgt[:, :-1], src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
+                    loss = self.criterion(logits.reshape(-1, logits.shape[-1]), tgt[:, 1:].reshape(-1))
+                else:
+                    logits = self.model(src, tgt[:, :-1])
+                    loss = self.criterion(logits.reshape(-1, logits.shape[-1]), tgt[:, 1:].reshape(-1))
                 
             running_loss.update(loss.item(), bs)
             pbar.set_postfix(loss=running_loss.avg)
@@ -126,7 +130,6 @@ class Trainer:
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
-            # break
         return running_loss.avg
 
     def evaluate(self, phase):
@@ -144,10 +147,15 @@ class Trainer:
             bs = src.size(0)
             
             with torch.autocast(device_type='cuda', dtype=self.dtype):
-                with torch.no_grad():
-                    src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt[:, :-1], self.device)
-                    logits = self.model(src, tgt[:, :-1], src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
-                    loss = self.criterion(logits.reshape(-1, logits.shape[-1]), tgt[:, 1:].reshape(-1))
+                if self.config.model_name == "seq2seq_transformer":
+                    with torch.no_grad():
+                        src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt[:, :-1], self.device)
+                        logits = self.model(src, tgt[:, :-1], src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
+                        loss = self.criterion(logits.reshape(-1, logits.shape[-1]), tgt[:, 1:].reshape(-1))
+                else:
+                    with torch.no_grad():
+                        logits = self.model(src, tgt[:, :-1])
+                        loss = self.criterion(logits.reshape(-1, logits.shape[-1]), tgt[:, 1:].reshape(-1))
 
             y_pred = torch.argmax(logits.reshape(-1, logits.shape[-1]), 1)
             correct = (y_pred == tgt[:, 1:].reshape(-1)).cpu().numpy().mean()
@@ -155,7 +163,6 @@ class Trainer:
             running_loss.update(loss.item(), bs)
             running_acc_tok.update(correct, bs)
             
-            # break
         return running_acc_tok.avg, running_loss.avg
 
     def train(self):
@@ -164,9 +171,9 @@ class Trainer:
             training_loss = self.train_one_epoch() 
             valid_accuracy_tok, valid_loss = self.evaluate("valid")
             
-            self.train_loss_list.append(round(training_loss, 4))
-            self.valid_loss_list.append(round(valid_loss, 4))
-            self.valid_accuracy_tok_list.append(round(valid_accuracy_tok, 4))
+            self.train_loss_list.append(round(training_loss, 7))
+            self.valid_loss_list.append(round(valid_loss, 7))
+            self.valid_accuracy_tok_list.append(round(valid_accuracy_tok, 7))
             
             if self.scheduler == "multi_step":
                 self.scheduler.step()
@@ -179,13 +186,11 @@ class Trainer:
             self.save_model("last_checkpoint.pth")
 
             if valid_accuracy_tok > self.best_accuracy:
-                print(f"==> Best Accuracy improved to {round(valid_accuracy_tok, 4)} from {self.best_accuracy}")
-                self.best_accuracy = round(valid_accuracy_tok, 4)
+                print(f"==> Best Accuracy improved to {round(valid_accuracy_tok, 7)} from {self.best_accuracy}")
+                self.best_accuracy = round(valid_accuracy_tok, 7)
                 self.save_model("best_checkpoint.pth")
             
-            self.log_results()            
-        
-        # self.test_seq_acc()
+            self.log_results()
 
         
     def save_model(self, file_name):
@@ -206,15 +211,37 @@ class Trainer:
         df_data = np.array(data_list).T
         df = pd.DataFrame(df_data, columns=column_list)
         df.to_csv(os.path.join(self.logs_dir, "logs.csv"))
-
+        
     def test_seq_acc(self):
-        self.device = 'cuda'
-        self.load_best_model()
+        file = os.path.join(self.logs_dir, "best_checkpoint.pth")
+        state_dict = torch.load(file, map_location=self.device)['state_dict']
+        self.model.load_state_dict(state_dict)
         
         test_accuracy_tok, _ = self.evaluate("test")
-        test_accuracy_seq = sequence_accuracy(self.config, self.device)
-        f= open(os.path.join(self.root_dir, "score.txt"),"w+")
-        f.write(f"Token Accuracy = {(round(test_accuracy_tok, 4))}\n")
-        f.write(f"Sequence Accuracy = {(round(test_accuracy_seq, 4))}\n")
+        
+        predictor = Predictor(self.config)
+        
+        print("Calculating Sequence Accuracy for predictions (1 example per batch)")
+        pbar = tqdm(self.dataloaders["test"], total=len(self.dataloaders["test"]))
+        pbar.set_description(f"Test")
+        
+        y_preds = []
+        y_true = []
+        for src, tgt in pbar:
+            src = src.to(self.device)
+            tgt = tgt.numpy()
+            bs = src.size(0)
+            y_pred = predictor.predict(src[0].unsqueeze(0)) #only one example from each batch
+            y_preds.append(y_pred.cpu().numpy())
+            y_true.append(np.trim_zeros(tgt[0]))
+
+#         return y_true, y_preds
+
+        test_accuracy_seq = sequence_accuracy(y_true, y_preds)
+        f= open(os.path.join(self.logs_dir, "score.txt"),"w+")
+        f.write(f"Token Accuracy = {(round(test_accuracy_tok, 7))}\n")
+        f.write(f"Sequence Accuracy = {(round(test_accuracy_seq, 7))}\n")
         f.close()
-        print(f"Test Accuracy: {round(test_accuracy_tok, 4)} | Valid Accuracy: {self.best_accuracy}")
+        print(f"Test Accuracy: {round(test_accuracy_tok, 7)} | Valid Accuracy: {self.best_accuracy}") 
+        print(f"Test Sequence Accuracy: {test_accuracy_seq}")
+

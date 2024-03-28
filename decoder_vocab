@@ -2,7 +2,6 @@
 <bos>
 E
 pi
-I
 s+
 s-
 0
@@ -46,7 +45,6 @@ atanh
 acoth
 asech
 acsch
-derivative
 s_1
 s_2
 s_3
@@ -58,13 +56,4 @@ s_8
 s_9
 s_10
 s_11
-s_12
-s_13
-s_14
-s_15
-s_16
-s_17
-s_18
-s_19
-s_20
 <eos>
