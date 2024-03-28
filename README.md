@@ -1,5 +1,11 @@
 # Evaluation Test: SYMBA
 
+Project: [Evolutionary and Transformer Models for Symbolic Regression](https://ml4sci.org/gsoc/2024/proposal_SYMBA3.html)
+
+This repository contains the solution to evaluation task of above project. Below is my approach towards the problem.
+
+Model weights can be found [here](https://drive.google.com/file/d/1rUqJLPFTxfv5cCBHWXTh8poMqxwMUK5Q/view?usp=sharing)
+
 ## Tasks
 
 The evaluation test consisted of 3 tasks (2 common and 1 specific). Following is my approach to solving the tasks and rationale behind choice of methods.
@@ -135,9 +141,11 @@ config = Config(experiment_name="evolved",
 Step 3: Initialize and run the trainer
 
 ```python
-from engine import Trainer
-trainer = Trainer(config, dataloaders)
+from engine import Trainertrainer = Trainer(config, dataloaders)
 trainer.train()
 
-trainer.test_seq_acc() # to get sequence accuracy
+trainer.test_seq_acc() # to get sequence accuracy on test set
 ```
+
+## Contact
+For any questions or issues regarding this repository, please contact `aryamaanthakur.2002@gmail.com`
